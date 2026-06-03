@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       try {
-        const response = await fetch("http://localhost:5041/api/Auth/register", {
+        const response = await fetch("https://stepwise-api-production.up.railway.app", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
