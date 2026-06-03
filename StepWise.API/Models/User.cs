@@ -1,24 +1,79 @@
-using MongoDB.Bson;
-using MongoDB.Bson.Serialization.Attributes;
+using Microsoft.AspNetCore.Mvc;
+using MongoDB.Driver;
+using StepWise.API.Models;
+using BCrypt.Net;
 
-namespace StepWise.API.Models
+namespace StepWise.API.Controllers
 {
-    public class User
+    [ApiController]
+    [Route("api/[controller]")]
+    public class AuthController : ControllerBase
     {
-        [BsonId]
-        [BsonRepresentation(BsonType.ObjectId)]
-        public string? Id { get; set; }
+        private readonly IMongoCollection<User> _users;
+        private readonly JwtService _jwtService;
 
-        [BsonElement("nome")]
-        public string Nome { get; set; } = string.Empty;
+        public AuthController(IConfiguration config, JwtService jwtService)
+        {
+            var client = new MongoClient(config["MongoDB:ConnectionString"]);
+            var db = client.GetDatabase(config["MongoDB:DatabaseName"]);
+            _users = db.GetCollection<User>("Users");
 
-        [BsonElement("email")]
-        public string Email { get; set; } = string.Empty;
+            _jwtService = jwtService;
+        }
 
-        [BsonElement("senhaHash")]
-        public string SenhaHash { get; set; } = string.Empty;
+        // 🔥 REGISTER
+        [HttpPost("register")]
+        public async Task<IActionResult> Register([FromBody] RegisterDto dto)
+        {
+            var existingUser = await _users
+                .Find(u => u.Email == dto.Email)
+                .FirstOrDefaultAsync();
 
-        [BsonElement("criadoEm")]
-        public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+            if (existingUser != null)
+                return BadRequest(new { message = "Usuário já existe" });
+
+            var user = new User
+            {
+                Nome = dto.Nome,
+                Email = dto.Email,
+                SenhaHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                CriadoEm = DateTime.UtcNow
+            };
+
+            await _users.InsertOneAsync(user);
+
+            var token = _jwtService.GenerateToken(user);
+
+            return Ok(new
+            {
+                token,
+                nome = user.Nome,
+                email = user.Email
+            });
+        }
+
+        // 🔐 LOGIN
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginDto dto)
+        {
+            var user = await _users
+                .Find(u => u.Email == dto.Email)
+                .FirstOrDefaultAsync();
+
+            if (user == null)
+                return Unauthorized(new { message = "Usuário não encontrado" });
+
+            if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.SenhaHash))
+                return Unauthorized(new { message = "Senha inválida" });
+
+            var token = _jwtService.GenerateToken(user);
+
+            return Ok(new
+            {
+                token,
+                nome = user.Nome,
+                email = user.Email
+            });
+        }
     }
 }
