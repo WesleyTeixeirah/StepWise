@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const senha = document.getElementById("senhaLogin").value;
 
       try {
-        const response = await fetch("https://stepwise-api-production.up.railway.app", {
+        const response = await fetch("https://stepwise-api-production.up.railway.app/api/Auth/login"", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
