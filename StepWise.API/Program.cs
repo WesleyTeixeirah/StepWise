@@ -8,8 +8,15 @@ using StepWise.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ========================
+// CONTROLLERS
+// ========================
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// ========================
+// SWAGGER + JWT
+// ========================
 builder.Services.AddSwaggerGen(c =>
 {
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -21,6 +28,7 @@ builder.Services.AddSwaggerGen(c =>
         In = ParameterLocation.Header,
         Description = "Digite: Bearer {seu token}"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -37,19 +45,37 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// ========================
+// CONFIG MONGO
+// ========================
 builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDB"));
 
+// ========================
+// DEPENDENCIES
+// ========================
 builder.Services.AddSingleton<IUserRepository, UserRepository>();
 builder.Services.AddSingleton<ITaskRepository, TaskRepository>();
+
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<UserService>();
 
+// ========================
+// JWT CONFIG (SAFE)
+// ========================
+var jwtSecret = builder.Configuration["Jwt:Secret"];
 
-var jwtSecret = builder.Configuration["Jwt:Secret"]!;
+if (string.IsNullOrEmpty(jwtSecret))
+{
+    throw new Exception("JWT Secret não configurado no appsettings.json");
+}
+
 var key = Encoding.UTF8.GetBytes(jwtSecret);
 
+// ========================
+// AUTHENTICATION
+// ========================
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -61,6 +87,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = false,
             ClockSkew = TimeSpan.Zero
         };
+
         options.Events = new JwtBearerEvents
         {
             OnAuthenticationFailed = context =>
@@ -70,12 +97,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             },
             OnTokenValidated = context =>
             {
-                Console.WriteLine("JWT OK: token validado!");
+                Console.WriteLine("JWT OK: token válido");
                 return Task.CompletedTask;
             },
             OnMessageReceived = context =>
             {
-                Console.WriteLine("JWT Header recebido: " + context.Request.Headers["Authorization"]);
+                Console.WriteLine("Authorization: " + context.Request.Headers["Authorization"]);
                 return Task.CompletedTask;
             }
         };
@@ -83,21 +110,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// ========================
+// CORS (NETLIFY READY)
+// ========================
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
         policy =>
         {
             policy
+                .AllowAnyOrigin()
                 .AllowAnyHeader()
-                .AllowAnyMethod()
-                .SetIsOriginAllowed(_ => true);
+                .AllowAnyMethod();
         });
 });
 
 var app = builder.Build();
 
-app.UseCors("AllowFrontend"); 
+// ========================
+// PIPELINE (ORDEM CORRETA)
+// ========================
+app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
